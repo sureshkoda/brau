@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Attendance Manager</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-image: url('https://img.freepik.com/free-photo/top-view-workspace-with-copy-space_23-2148236854.jpg?semt=ais_hybrid'); /* Add your background image URL here */
+            background-size: cover;
+            background-position: center;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden; /* Prevent body overflow */
+        }
+        h2, h3 { text-align: center; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        th, td { border: 1px solid black; padding: 8px; text-align: center; }
+        th { background-color: #f2f2f2; }
+        button { margin: 5px; padding: 10px; }
+        .container { 
+            max-width: 900px; 
+            margin: auto; 
+            background: rgba(255, 255, 255, 0.9); 
+            padding: 20px; 
+            border-radius: 10px; 
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); 
+            overflow-y: auto; /* Enable vertical scrolling */
+            max-height: 80vh; /* Limit height to 80% of viewport */
+        }
+        .hidden { display: none; }
+        .dark-mode { background-color: #333; color: #fff; }
+        .dark-mode th, .dark-mode td { border-color: #fff; }
+
+        /* Login Screen Styles */
+        #loginScreen {
+            background: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+
+        /* Modal Styles */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0, 0, 0, 0.5); }
+        .modal-content { background-color: #fff; margin: 10% auto; padding: 20px; border: 1px solid #888; width: 50%; }
+        .close { color: #aaa; float: right; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close:hover { color: black; }
+    </style>
+</head>
+<body>
+    <div id="loginScreen">
+        <h2>Login to Edit</h2>
+        <input type="password" id="password" placeholder="Enter Password">
+        <button onclick="checkLogin()">Login</button>
+        <button onclick="generatePassword()">Generate Password</button>
+    </div>
+    
+    <div id="mainContent" class="hidden">
+        <div class="container">
+            <h2>Dr. B.R. Ambedkar University, Srikakulam</h2>
+            <h3>College of Engineering</h3>
+            <h3>Department of Computer Science and Engineering</h3>
+            <h3><input type="text" id="title" value="B-TECH - VI Semester February Month Attendance Percentage List" readonly></h3>
+            
+            <input type="text" id="search" placeholder="Search by Roll Number or Name" oninput="filterTable()">
+            <button onclick="saveToExcel()">Save to Excel</button>
+            <button onclick="saveToWord()">Save to Word</button>
+            <button onclick="toggleDarkMode()">Toggle Dark Mode</button>
+            <button onclick="submitChanges()">Submit</button>
+            
+            <table id="attendanceTable">
+                <thead>
+                    <tr>
+                        <th>Roll Number</th>
+                        <th>Name</th>
+                        <th>Working Days</th>
+                        <th>Classes Conducted</th>
+                        <th>Classes Attended</th>
+                        <th>Absent</th>
+                        <th>Attendance %</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Modal for Editing -->
+    <div id="editModal" class="modal">
+        <div class="modal-content">
+            <span class="close" onclick="closeModal()">&times;</span>
+            <h2>Edit Student Details</h2>
+            <label>Roll Number: <input type="text" id="editRoll"></label><br><br>
+            <label>Name: <input type="text" id="editName"></label><br><br>
+            <label>Working Days: <input type="number" id="editWorking"></label><br><br>
+            <label>Classes Conducted: <input type="number" id="editConducted"></label><br><br>
+            <label>Classes Attended: <input type="number" id="editAttended"></label><br><br>
+            <button onclick="saveChanges()">Save Changes</button>
+            <button onclick="removeRow()">Remove Row</button>
+        </div>
+    </div>
+    
+    <script>
+        let data = [];
+        let rollNumber = 2281951001;
+        let adminPassword = "admin123"; // Default password
+        let currentEditIndex = null;
+
+        // Load data from localStorage if available
+        function loadData() {
+            const savedData = localStorage.getItem("attendanceData");
+            if (savedData) {
+                data = JSON.parse(savedData);
+            } else {
+                loadStudents(); // Load default data if no saved data exists
+            }
+            renderTable();
+        }
+
+        // Save data to localStorage
+        function saveData() {
+            localStorage.setItem("attendanceData", JSON.stringify(data));
+        }
+
+        function checkLogin() {
+            let password = document.getElementById("password").value;
+            if (password === adminPassword) {
+                document.getElementById("loginScreen").style.display = "none";
+                document.getElementById("mainContent").classList.remove("hidden");
+            } else {
+                alert("Incorrect Password");
+            }
+        }
+
+        function generatePassword() {
+            // Generate a 6-digit random number
+            let password = Math.floor(100000 + Math.random() * 900000);
+            adminPassword = password.toString(); // Update the admin password
+
+            // Simulate sending password via WhatsApp/SMS
+            const phoneNumber = "8186064522";
+            const message = `Your 6-digit password is: ${password}`;
+            const whatsappLink = `https://wa.me/${phoneNumber}?text=${encodeURIComponent(message)}`;
+            const smsLink = `sms:${phoneNumber}?body=${encodeURIComponent(message)}`;
+
+            // Open WhatsApp or SMS link (simulated)
+            alert(`A 6-digit password has been sent to ${phoneNumber} via WhatsApp/SMS.`);
+            console.log(`Password sent to ${phoneNumber}: ${password}`); // Log the password (for debugging)
+            window.open(whatsappLink, '_blank'); // Open WhatsApp link in a new tab
+        }
+
+        function loadStudents() {
+            let students = [
+                "A.Charishma", "A.Hemanth Kumar", "", "A.Supriya", "A.Premalatha", "A.Sravani",
+                "B.Durgaprasad", "B.Gayathri", "B.Chandu", "B.Sanjana", "B.Kusuma", "B.Lavanya",
+                "B.Siri", "Ch.Bhavaniprasad", "Ch.Hemavati", "D.Susmitha", "D.Jagadeesh", "D.Devendra",
+                "G Srinivasu", "G.Yasaswini", "G.Dedeepya", "G.Sai Kumar", "G.Santhosh", "G.Pooja",
+                "G.Meghana", "G.Pallavi", "G.Divya", "J.Jagadeesh", "K.KrishnaRaju", "K.Kalyani",
+                "K.Jahnavi", "K.Devi Vara Prasad", "K.Vikky", "K.Chakri", "K.ManjulaDevi", "K.sowmya",
+                "", "L.Revathi", "L.Gowthami", "M.Ganapathi", "Minisha Rao", "M.Trinadh",
+                "M.Devasish Sharma", "N.Swetha", "P.Bhargav", "P.Tejasri", "P.Ranga Reddy",
+                "P.Bhavani Shankar", "P.Meenakshi", "", "R.Rajeswari", "S.Suneema", "S.Mounika",
+                "Sireesha pattnalk", "S.Suresh", "Srikanya.M", "S.Rupa devi", "T.Ganesh", "T.Lavanya",
+                "T.Jyothi", "U.Ravi Shankar", "V.Praveen", "V.Chandu", "G.Jyothi", "J.Remuka",
+                "K.Thrilokesh", "K.Suresh", "P.Devarshini", "S.Dhanalakshmi", "S.Suguna"
+            ];
+
+            students.forEach((name, index) => {
+                if (name !== "") {
+                    data.push({ roll: rollNumber++, name, working: 21, conducted: 126, attended: "", absent: "", percentage: "" });
+                } else {
+                    data.push({ roll: rollNumber++, name: "", working: "", conducted: "", attended: "", absent: "", percentage: "" }); // Empty row
+                }
+            });
+            saveData(); // Save the initial data to localStorage
+        }
+
+        function renderTable() {
+            let tbody = document.querySelector('#attendanceTable tbody');
+            tbody.innerHTML = '';
+            data.forEach((item, index) => {
+                let row = `<tr>
+                    <td>${item.roll}</td>
+                    <td>${item.name}</td>
+                    <td>${item.working}</td>
+                    <td>${item.conducted}</td>
+                    <td>${item.attended}</td>
+                    <td>${item.absent}</td>
+                    <td>${item.percentage}</td>
+                    <td><button onclick="openModal(${index})">Modify</button></td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function openModal(index) {
+            currentEditIndex = index;
+            let item = data[index];
+            document.getElementById('editRoll').value = item.roll;
+            document.getElementById('editName').value = item.name;
+            document.getElementById('editWorking').value = item.working;
+            document.getElementById('editConducted').value = item.conducted;
+            document.getElementById('editAttended').value = item.attended;
+            document.getElementById('editModal').style.display = 'block';
+        }
+
+        function closeModal() {
+            document.getElementById('editModal').style.display = 'none';
+        }
+
+        function saveChanges() {
+            let roll = document.getElementById('editRoll').value;
+            let name = document.getElementById('editName').value;
+            let working = parseInt(document.getElementById('editWorking').value);
+            let conducted = parseInt(document.getElementById('editConducted').value);
+            let attended = parseInt(document.getElementById('editAttended').value);
+
+            // Update only the fields that have been modified
+            if (roll) data[currentEditIndex].roll = roll;
+            if (name) data[currentEditIndex].name = name;
+            if (!isNaN(working)) data[currentEditIndex].working = working;
+            if (!isNaN(conducted)) data[currentEditIndex].conducted = conducted;
+            if (!isNaN(attended)) data[currentEditIndex].attended = attended;
+
+            // Recalculate absent and percentage
+            data[currentEditIndex].absent = data[currentEditIndex].conducted - data[currentEditIndex].attended;
+            data[currentEditIndex].percentage = ((data[currentEditIndex].attended / data[currentEditIndex].conducted) * 100).toFixed(2) + '%';
+
+            saveData(); // Save updated data to localStorage
+            renderTable();
+            closeModal();
+        }
+
+        function removeRow() {
+            if (confirm("Are you sure you want to remove this row?")) {
+                // Empty the row instead of deleting it
+                data[currentEditIndex] = { roll: data[currentEditIndex].roll, name: "", working: "", conducted: "", attended: "", absent: "", percentage: "" };
+                saveData(); // Save updated data to localStorage
+                renderTable();
+                closeModal();
+            }
+        }
+
+        function submitChanges() {
+            alert("Changes submitted! Table is now read-only.");
+            document.getElementById("loginScreen").style.display = "block";
+            document.getElementById("mainContent").classList.add("hidden");
+        }
+
+        function filterTable() {
+            let searchTerm = document.getElementById('search').value.toLowerCase();
+            let filteredData = data.filter(item =>
+                item.roll.toString().includes(searchTerm) ||
+                item.name.toLowerCase().includes(searchTerm)
+            );
+            renderFilteredTable(filteredData);
+        }
+
+        function renderFilteredTable(filteredData) {
+            let tbody = document.querySelector('#attendanceTable tbody');
+            tbody.innerHTML = '';
+            filteredData.forEach((item, index) => {
+                let row = `<tr>
+                    <td>${item.roll}</td>
+                    <td>${item.name}</td>
+                    <td>${item.working}</td>
+                    <td>${item.conducted}</td>
+                    <td>${item.attended}</td>
+                    <td>${item.absent}</td>
+                    <td>${item.percentage}</td>
+                    <td><button onclick="openModal(${index})">Modify</button></td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+
+        function saveToExcel() {
+            // Remove the "Actions" column before exporting
+            const exportData = data.map(item => ({
+                roll: item.roll,
+                name: item.name,
+                working: item.working,
+                conducted: item.conducted,
+                attended: item.attended,
+                absent: item.absent,
+                percentage: item.percentage
+            }));
+
+            let wb = XLSX.utils.book_new();
+            let ws = XLSX.utils.json_to_sheet(exportData);
+            XLSX.utils.book_append_sheet(wb, ws, "Attendance");
+            XLSX.writeFile(wb, "Attendance.xlsx");
+        }
+
+        function saveToWord() {
+            // Remove the "Actions" column before exporting
+            const exportData = data.map(item => ({
+                roll: item.roll,
+                name: item.name,
+                working: item.working,
+                conducted: item.conducted,
+                attended: item.attended,
+                absent: item.absent,
+                percentage: item.percentage
+            }));
+
+            let content = `<h1>${document.getElementById('title').value}</h1>
+                           <table border="1">
+                               <thead>
+                                   <tr>
+                                       <th>Roll Number</th>
+                                       <th>Name</th>
+                                       <th>Working Days</th>
+                                       <th>Classes Conducted</th>
+                                       <th>Classes Attended</th>
+                                       <th>Absent</th>
+                                       <th>Attendance %</th>
+                                   </tr>
+                               </thead>
+                               <tbody>
+                                   ${exportData.map(item => `
+                                       <tr>
+                                           <td>${item.roll}</td>
+                                           <td>${item.name}</td>
+                                           <td>${item.working}</td>
+                                           <td>${item.conducted}</td>
+                                           <td>${item.attended}</td>
+                                           <td>${item.absent}</td>
+                                           <td>${item.percentage}</td>
+                                       </tr>
+                                   `).join('')}
+                               </tbody>
+                           </table>`;
+            let blob = new Blob([content], { type: "application/msword" });
+            saveAs(blob, "Attendance.doc");
+        }
+
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+        }
+
+        window.onload = loadData; // Load data from localStorage when the page loads
+    </script>
+</body>
+</html>
